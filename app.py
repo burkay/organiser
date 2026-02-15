@@ -302,11 +302,10 @@ class LoginView:
                     .logo-wrapper {{
                         text-align: center;
                         margin-bottom: 30px;
-                        padding: 40px;
-                        border-radius: 20px;
+                        padding: 20px;
                     }}
                     .logo-wrapper img {{
-                        max-width: 300px;
+                        max-width: 200px;
                         width: 100%;
                         height: auto;
                         pointer-events: none;
