@@ -8,7 +8,7 @@ from pymongo import MongoClient
 from PIL import Image
 
 # Sayfa ayarları
-st.set_page_config(page_title="Müzayede Eser Havuzu", layout="wide")
+st.set_page_config(page_title="Müzayede Eser Havuzu", layout="wide", page_icon="logo.png")
 st.title("🏛️ Müzayede Eser Havuzu")
 
 # --- MONGODB ---
