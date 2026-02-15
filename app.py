@@ -289,20 +289,18 @@ class LoginView:
     
     def render(self):
         """Giriş ekranını göster"""
-        # Logo göster (eğer varsa)
+        # Logo göster (eğer varsa) - orijinal haliyle, arka plan işleme YOK
         logo_path = "logo.png"
         if os.path.exists(logo_path):
             col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
             with col_logo2:
-                buf = ImageProcessor.process_logo(logo_path, width=300)
-                b64 = base64.b64encode(buf.read()).decode()
+                # Logoyu direkt göster, arka plan işleme yapma
                 st.markdown(
-                    f'<div style="text-align: center;">'
-                    f'<img src="data:image/png;base64,{b64}" width="300" '
-                    f'style="max-width:100%;height:auto;margin-bottom:20px;" />'
-                    f'</div>',
-                    unsafe_allow_html=True,
+                    '<div style="text-align: center; margin-bottom: 30px;">',
+                    unsafe_allow_html=True
                 )
+                st.image(logo_path, width=300)
+                st.markdown('</div>', unsafe_allow_html=True)
         
         st.title("🔐 Müzayede Eser Havuzu - Giriş")
         st.markdown("---")
