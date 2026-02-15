@@ -49,14 +49,12 @@ try:
     else:
         cursor = coll.find({})
     items = list(cursor)
-    for item in items:
-        item["_id"] = str(item["_id"])
 except Exception as e:
     st.error(f"Veritabanı okuma hatası: {e}")
     items = []
 
 if items:
-    df = pd.DataFrame(items)
+    df = pd.DataFrame(items).drop(columns=["_id"], errors="ignore")
     st.write(f"{len(df)} sonuç bulundu.")
     st.dataframe(df, use_container_width=True)
 else:
