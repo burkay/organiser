@@ -21,7 +21,7 @@ st.set_page_config(
 def get_db():
     mongo_uri = st.secrets.get("MONGO_URI")
     if not mongo_uri:
-        st.error("MONGO_URI secret'ı tanımlı değil. Streamlit Cloud'da ekleyin.")
+        st.error("MONGO_URI bulunamadı! Lütfen Secrets ayarlarına ekleyin.")
         st.stop()
     return MongoClient(mongo_uri).get_database("organiser")
 
@@ -35,6 +35,7 @@ def get_auth_password_from_db():
         return "drysele"
 
 def log_ip_to_mongodb(ip, status="Başarılı"):
+    """Giriş denemelerini MongoDB'ye kaydeder."""
     try:
         db = get_db()
         logs_coll = db.get_collection("ziyaretci_loglari")
@@ -59,7 +60,7 @@ if 'user_ip' not in st.session_state:
     st.session_state.user_ip = "0.0.0.0"
 
 if not st.session_state.authenticated:
-    st.session_state.user_ip = get_user_ip() # IP'yi bir kez al ve hafızada tut
+    st.session_state.user_ip = get_user_ip()
     
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_l, col_c, col_r = st.columns([1, 2, 1])
@@ -75,15 +76,17 @@ if not st.session_state.authenticated:
         if st.button("Sisteme Eriş"):
             dogru_sifre = get_auth_password_from_db()
             if girilen_kod == dogru_sifre:
+                # Başarılı girişi kaydet
                 log_ip_to_mongodb(st.session_state.user_ip, "Başarılı")
                 st.session_state.authenticated = True
                 st.rerun()
             else:
+                # Hatalı denemeyi kaydet
                 log_ip_to_mongodb(st.session_state.user_ip, "Hatalı Şifre")
                 st.error("Kod yanlış!")
     st.stop()
 
-# --- ANA UYGULAMA ---
+# --- BURADAN AŞAĞISI ANA UYGULAMA (Giriş sonrası) ---
 col_logo, col_title = st.columns([1, 8])
 with col_logo:
     if os.path.exists("logo.png"):
@@ -91,8 +94,52 @@ with col_logo:
 with col_title:
     st.title("🏛️ Müzayede Eser Havuzu")
 
-# Hatanın çözümü: Değişkeni st.session_state üzerinden çağırıyoruz
-st.success(f"Hoş geldiniz! IP adresiniz ({st.session_state.user_ip}) güvenlik amacıyla kaydedilmiştir.")
+st.success(f"Hoş geldiniz! IP adresiniz ({st.session_state.user_ip}) kaydedilmiştir.")
 
-# --- Mevcut Word İşleme ve Arama Kodlarını Buraya Ekleyin ---
-# (parse_word_eserler, sidebar dosya yükleme ve coll.find kısımları)
+# --- WORD PARSER VE VERİTABANI İŞLEMLERİ ---
+ALAN_ESLESME = {
+    "eser": "eser_adi", "sanatçı": "sanatci", "sanatci": "sanatci",
+    "sahip": "sahip", "kategori": "kategori", "depoda": "depoda", "detay": "detay"
+}
+
+def parse_word_eserler(paragraphs):
+    text = "\n".join(p.strip() for p in paragraphs if p and p.strip())
+    blocks = [b.strip() for b in text.split("---") if b.strip()]
+    kayitlar = []
+    for block in blocks:
+        rec = {"eser_adi": "", "sanatci": "", "sahip": "", "kategori": "", "depoda": False, "detay": ""}
+        for line in block.split("\n"):
+            if ":" not in line: continue
+            key, _, val = line.partition(":")
+            k_clean, v_clean = key.strip().lower(), val.strip()
+            if k_clean in ALAN_ESLESME:
+                db_k = ALAN_ESLESME[k_clean]
+                if db_k == "depoda": rec[db_k] = v_clean.lower() in ("evet", "1", "true")
+                else: rec[db_k] = v_clean
+        if rec["eser_adi"]: kayitlar.append(rec)
+    return kayitlar
+
+# SIDEBAR: Dosya yükleme
+st.sidebar.header("📤 Eser Dosyası Yükleme")
+uploaded_file = st.sidebar.file_uploader("Word dosyası seçin", type=["docx"])
+
+if uploaded_file:
+    doc = Document(uploaded_file)
+    kayitlar = parse_word_eserler([p.text for p in doc.paragraphs])
+    if kayitlar and st.sidebar.button("Veritabanına Ekle"):
+        coll = get_db().get_collection("eserler")
+        coll.insert_many(kayitlar)
+        st.sidebar.success(f"{len(kayitlar)} eser eklendi.")
+
+# ANA ALAN: Listeleme
+st.subheader("🔍 Eserlerde Ara")
+search = st.text_input("Arama yapın...")
+coll = get_db().get_collection("eserler")
+query = {"$or": [{"eser_adi": {"$regex": search, "$options": "i"}}, {"sanatci": {"$regex": search, "$options": "i"}}]} if search else {}
+
+items = list(coll.find(query).limit(100))
+if items:
+    df = pd.DataFrame(items).drop(columns=["_id"], errors="ignore")
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("Gösterilecek eser bulunamadı.")
