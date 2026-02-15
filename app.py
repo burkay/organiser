@@ -1,3 +1,4 @@
+import base64
 import os
 import io
 import streamlit as st
@@ -78,10 +79,16 @@ def logo_arka_planli(path, width, bg_rgb=SIDEBAR_BG):
     return buf
 
 if os.path.exists(LOGO_PATH):
-    st.sidebar.image(logo_arka_planli(LOGO_PATH, 200), width=200, caption="")
+    buf = logo_arka_planli(LOGO_PATH, 200)
+    b64 = base64.b64encode(buf.read()).decode()
+    st.sidebar.markdown(
+        f'<img src="data:image/png;base64,{b64}" width="200" style="pointer-events:none;max-width:100%;height:auto;" />',
+        unsafe_allow_html=True,
+    )
 st.sidebar.header("📤 Eser Dosyası Yükleme")
 st.sidebar.caption("Word dosyasında her eser '---' ile ayrılmış blokta olmalı. Alanlar: Eser:, Sanatçı:, Sahip:, Kategori:, Depoda: (Evet/Hayır), Detay:")
-uploaded_file = st.sidebar.file_uploader("Word dosyası seçin (.docx)", type=["docx"])
+st.sidebar.caption("**Dosyayı buraya sürükleyip bırakın** veya **Dosyalara göz at** ile seçin. En fazla 200 MB, .docx.")
+uploaded_file = st.sidebar.file_uploader("Word dosyası seçin (.docx)", type=["docx"], help="Dosya başına en fazla 200 MB. Sadece .docx kabul edilir.")
 
 if uploaded_file is not None:
     doc = Document(uploaded_file)
