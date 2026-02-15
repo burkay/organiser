@@ -289,6 +289,21 @@ class LoginView:
     
     def render(self):
         """Giriş ekranını göster"""
+        # Logo göster (eğer varsa)
+        logo_path = "logo.png"
+        if os.path.exists(logo_path):
+            col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+            with col_logo2:
+                buf = ImageProcessor.process_logo(logo_path, width=300)
+                b64 = base64.b64encode(buf.read()).decode()
+                st.markdown(
+                    f'<div style="text-align: center;">'
+                    f'<img src="data:image/png;base64,{b64}" width="300" '
+                    f'style="max-width:100%;height:auto;margin-bottom:20px;" />'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        
         st.title("🔐 Müzayede Eser Havuzu - Giriş")
         st.markdown("---")
         
@@ -345,17 +360,7 @@ class MainView:
         st.title("🏛️ Müzayede Eser Havuzu")
     
     def _render_sidebar(self):
-        """Yan panel - logo ve dosya yükleme"""
-        logo_path = "logo.png"
-        if os.path.exists(logo_path):
-            buf = ImageProcessor.process_logo(logo_path)
-            b64 = base64.b64encode(buf.read()).decode()
-            st.sidebar.markdown(
-                f'<img src="data:image/png;base64,{b64}" width="200" '
-                f'style="pointer-events:none;max-width:100%;height:auto;" />',
-                unsafe_allow_html=True,
-            )
-        
+        """Yan panel - dosya yükleme"""
         st.sidebar.header("📤 Eser Dosyası Yükleme")
         st.sidebar.caption(
             "Word dosyasında her eser '---' ile ayrılmış blokta olmalı. "
