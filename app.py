@@ -78,7 +78,7 @@ def logo_arka_planli(path, width, bg_rgb=SIDEBAR_BG):
     return buf
 
 if os.path.exists(LOGO_PATH):
-    st.sidebar.image(logo_arka_planli(LOGO_PATH, 140), width=140, caption="")
+    st.sidebar.image(logo_arka_planli(LOGO_PATH, 200), width=200, caption="")
 st.sidebar.header("📤 Eser Dosyası Yükleme")
 st.sidebar.caption("Word dosyasında her eser '---' ile ayrılmış blokta olmalı. Alanlar: Eser:, Sanatçı:, Sahip:, Kategori:, Depoda: (Evet/Hayır), Detay:")
 uploaded_file = st.sidebar.file_uploader("Word dosyası seçin (.docx)", type=["docx"])
