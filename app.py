@@ -289,7 +289,7 @@ class LoginView:
     
     def render(self):
         """Giriş ekranını göster"""
-        # Logo göster (eğer varsa) - HTML ile, büyütme opsiyonu YOK
+        # Logo göster (eğer varsa)
         logo_path = "logo.png"
         if os.path.exists(logo_path):
             # Logo'yu base64'e çevir
@@ -298,10 +298,23 @@ class LoginView:
             
             st.markdown(
                 f'''
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <img src="data:image/png;base64,{logo_data}" 
-                         width="300" 
-                         style="max-width: 100%; height: auto; pointer-events: none;" />
+                <style>
+                    .logo-container {{
+                        text-align: center;
+                        margin-bottom: 30px;
+                    }}
+                    .logo-container img {{
+                        max-width: 300px;
+                        width: 100%;
+                        height: auto;
+                        pointer-events: none;
+                        display: inline-block;
+                        /* Damalı arka planı gizle */
+                        background: var(--background-color);
+                    }}
+                </style>
+                <div class="logo-container">
+                    <img src="data:image/png;base64,{logo_data}" alt="Logo" />
                 </div>
                 ''',
                 unsafe_allow_html=True
