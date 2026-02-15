@@ -365,7 +365,7 @@ class MainView:
         uploaded_file = st.sidebar.file_uploader(
             "Word dosyası seçin (.docx)",
             type=["docx"],
-            help="Dosya başına en fazla 200 MB. Sadece .docx kabul edilir."
+            help="Dosya başına en fazla 200 MB. Sadece .docx formatı kabul edilir."
         )
         
         if uploaded_file:
@@ -373,33 +373,36 @@ class MainView:
     
     def _handle_file_upload(self, uploaded_file):
         """Dosya yükleme işlemi"""
-        doc = Document(uploaded_file)
-        paragraphs = [p.text for p in doc.paragraphs]
-        kayitlar = WordParser.parse(paragraphs)
-        
-        if kayitlar:
-            st.sidebar.success(
-                f"Toplam {len(kayitlar)} eser bulundu. Eklemek için butona tıklayın."
-            )
-            if st.sidebar.button("Eserleri Veritabanına Ekle"):
-                try:
-                    for k in kayitlar:
-                        k["dosya_adi"] = uploaded_file.name
-                    
-                    t0 = time.perf_counter()
-                    self.eserler_repo.insert_many(kayitlar)
-                    sure = time.perf_counter() - t0
-                    
-                    st.sidebar.success(
-                        f"{len(kayitlar)} eser {sure:.2f} saniyede veritabanına eklendi."
-                    )
-                except Exception as e:
-                    st.sidebar.error(f"Hata: {e}")
-        else:
-            st.sidebar.warning(
-                "Bu dosyada geçerli eser bloğu bulunamadı. "
-                "Format: Eser: ... , Sanatçı: ... , bloklar '---' ile ayrılmalı."
-            )
+        try:
+            doc = Document(uploaded_file)
+            paragraphs = [p.text for p in doc.paragraphs]
+            kayitlar = WordParser.parse(paragraphs)
+            
+            if kayitlar:
+                st.sidebar.success(
+                    f"Toplam {len(kayitlar)} eser bulundu. Eklemek için butona tıklayın."
+                )
+                if st.sidebar.button("Eserleri Veritabanına Ekle"):
+                    try:
+                        for k in kayitlar:
+                            k["dosya_adi"] = uploaded_file.name
+                        
+                        t0 = time.perf_counter()
+                        self.eserler_repo.insert_many(kayitlar)
+                        sure = time.perf_counter() - t0
+                        
+                        st.sidebar.success(
+                            f"{len(kayitlar)} eser {sure:.2f} saniyede veritabanına eklendi."
+                        )
+                    except Exception as e:
+                        st.sidebar.error(f"Hata: {e}")
+            else:
+                st.sidebar.warning(
+                    "Bu dosyada geçerli eser bloğu bulunamadı. "
+                    "Format: Eser: ... , Sanatçı: ... , bloklar '---' ile ayrılmalı."
+                )
+        except Exception as e:
+            st.sidebar.error(f"Dosya okuma hatası: {e}")
     
     def _render_search(self):
         """Arama ve filtreleme bölümü"""
