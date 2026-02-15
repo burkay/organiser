@@ -1,8 +1,10 @@
 import os
+import io
 import streamlit as st
 import pandas as pd
 from docx import Document
 from pymongo import MongoClient
+from PIL import Image
 
 # Sayfa ayarları
 st.set_page_config(page_title="Müzayede Eser Havuzu", layout="wide")
@@ -56,8 +58,21 @@ def parse_word_eserler(paragraphs):
 
 # --- SIDEBAR: Logo + Dosya yükleme ---
 LOGO_PATH = "logo.png"
+SIDEBAR_BG = (240, 242, 246)  # Streamlit sidebar rengine uyumlu açık gri
+
+def logo_arka_planli(path, width, bg_rgb=SIDEBAR_BG):
+    """Şeffaf logoyu düz arka plan rengiyle birleştirir (damalı görünümü kaldırır)."""
+    img = Image.open(path).convert("RGBA")
+    arka = Image.new("RGBA", img.size, (*bg_rgb, 255))
+    arka.paste(img, (0, 0), img)
+    arka = arka.convert("RGB")
+    buf = io.BytesIO()
+    arka.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
 if os.path.exists(LOGO_PATH):
-    st.sidebar.image(LOGO_PATH, width=140, caption="")
+    st.sidebar.image(logo_arka_planli(LOGO_PATH, 140), width=140, caption="")
 st.sidebar.header("📤 Eser Dosyası Yükleme")
 st.sidebar.caption("Word dosyasında her eser '---' ile ayrılmış blokta olmalı. Alanlar: Eser:, Sanatçı:, Sahip:, Kategori:, Depoda: (Evet/Hayır), Detay:")
 uploaded_file = st.sidebar.file_uploader("Word dosyası seçin (.docx)", type=["docx"])
