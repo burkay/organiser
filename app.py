@@ -63,22 +63,26 @@ def show_login():
     with col2:
         st.subheader("Lütfen erişim kodunu girin")
         
-        access_code = st.text_input(
-            "Erişim Kodu",
-            type="password",
-            placeholder="Erişim kodunu girin...",
-            key="access_code_input"
-        )
-        
-        if st.button("Giriş Yap", use_container_width=True):
-            if verify_access_code(access_code):
-                st.session_state.authenticated = True
-                st.session_state.login_time = datetime.now()
-                st.success("✅ Giriş başarılı!")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                st.error("❌ Hatalı erişim kodu!")
+        # Form kullanarak Enter tuşu desteği ekle
+        with st.form(key="login_form", clear_on_submit=False):
+            access_code = st.text_input(
+                "Erişim Kodu",
+                type="password",
+                placeholder="Erişim kodunu girin ve Enter'a basın...",
+                key="access_code_input"
+            )
+            
+            submitted = st.form_submit_button("Giriş Yap", use_container_width=True)
+            
+            if submitted and access_code:
+                if verify_access_code(access_code):
+                    st.session_state.authenticated = True
+                    st.session_state.login_time = datetime.now()
+                    st.success("✅ Giriş başarılı!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Hatalı erişim kodu!")
         
         st.caption("Erişim kodunu bilmiyorsanız, lütfen yönetici ile iletişime geçin.")
 
