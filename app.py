@@ -289,7 +289,7 @@ class LoginView:
     
     def render(self):
         """Giriş ekranını göster"""
-        # Logo göster (eğer varsa)
+        # Logo göster (eğer varsa) - Streamlit background rengiyle uyumlu
         logo_path = "logo.png"
         if os.path.exists(logo_path):
             # Logo'yu base64'e çevir
@@ -299,21 +299,31 @@ class LoginView:
             st.markdown(
                 f'''
                 <style>
-                    .logo-container {{
+                    .logo-wrapper {{
                         text-align: center;
                         margin-bottom: 30px;
+                        padding: 40px;
+                        border-radius: 20px;
                     }}
-                    .logo-container img {{
+                    .logo-wrapper img {{
                         max-width: 300px;
                         width: 100%;
                         height: auto;
                         pointer-events: none;
                         display: inline-block;
-                        /* Damalı arka planı gizle */
-                        background: var(--background-color);
+                        /* Damalı pattern'i gizlemek için arka plan ekle */
+                        background-color: #0e1117; /* Dark mode için */
+                        border-radius: 10px;
+                        padding: 10px;
+                    }}
+                    /* Light mode için */
+                    @media (prefers-color-scheme: light) {{
+                        .logo-wrapper img {{
+                            background-color: #ffffff;
+                        }}
                     }}
                 </style>
-                <div class="logo-container">
+                <div class="logo-wrapper">
                     <img src="data:image/png;base64,{logo_data}" alt="Logo" />
                 </div>
                 ''',
