@@ -58,16 +58,22 @@ def parse_word_eserler(paragraphs):
 
 # --- SIDEBAR: Logo + Dosya yükleme ---
 LOGO_PATH = "logo.png"
-SIDEBAR_BG = (240, 242, 246)  # Streamlit sidebar rengine uyumlu açık gri
+SIDEBAR_BG = (240, 242, 246)
 
 def logo_arka_planli(path, width, bg_rgb=SIDEBAR_BG):
-    """Şeffaf logoyu düz arka plan rengiyle birleştirir (damalı görünümü kaldırır)."""
+    """Şeffaf veya damalı arka planı tek renk (sidebar rengi) yapar."""
     img = Image.open(path).convert("RGBA")
-    arka = Image.new("RGBA", img.size, (*bg_rgb, 255))
-    arka.paste(img, (0, 0), img)
-    arka = arka.convert("RGB")
+    w, h = img.size
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            # Şeffaf veya açık damalı (beyaz/açık gri) pikselleri arka plan rengi yap
+            if a < 128 or (r > 215 and g > 215 and b > 215):
+                px[x, y] = (*bg_rgb, 255)
+    out = img.convert("RGB")
     buf = io.BytesIO()
-    arka.save(buf, format="PNG")
+    out.save(buf, format="PNG")
     buf.seek(0)
     return buf
 
