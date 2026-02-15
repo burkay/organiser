@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 from docx import Document
@@ -53,7 +54,10 @@ def parse_word_eserler(paragraphs):
             kayitlar.append(rec)
     return kayitlar
 
-# --- SIDEBAR: Dosya yükleme ---
+# --- SIDEBAR: Logo + Dosya yükleme ---
+LOGO_PATH = "logo.png"
+if os.path.exists(LOGO_PATH):
+    st.sidebar.image(LOGO_PATH, width=80, caption="")
 st.sidebar.header("📤 Eser Dosyası Yükleme")
 st.sidebar.caption("Word dosyasında her eser '---' ile ayrılmış blokta olmalı. Alanlar: Eser:, Sanatçı:, Sahip:, Kategori:, Depoda: (Evet/Hayır), Detay:")
 uploaded_file = st.sidebar.file_uploader("Word dosyası seçin (.docx)", type=["docx"])
