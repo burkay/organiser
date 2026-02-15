@@ -289,12 +289,35 @@ class LoginView:
     
     def render(self):
         """Giriş ekranını göster"""
-        # Logo göster (eğer varsa) - Streamlit background rengiyle uyumlu
+        # Logo göster (eğer varsa) - şeffaflığı koyu arka planla değiştir
         logo_path = "logo.png"
         if os.path.exists(logo_path):
-            # Logo'yu base64'e çevir
-            with open(logo_path, "rb") as f:
-                logo_data = base64.b64encode(f.read()).decode()
+            # Logo'yu yükle ve şeffaf kısmı koyu renkle doldur
+            try:
+                from PIL import Image
+                import io
+                
+                # Logo'yu aç
+                logo_img = Image.open(logo_path).convert("RGBA")
+                
+                # Yeni bir arka plan oluştur (koyu gri/siyah)
+                background = Image.new("RGBA", logo_img.size, (14, 17, 23, 255))  # #0e1117
+                
+                # Logo'yu arka plan üzerine yapıştır
+                background.paste(logo_img, (0, 0), logo_img)
+                
+                # RGB'ye çevir (artık şeffaflık yok)
+                final_logo = background.convert("RGB")
+                
+                # Base64'e çevir
+                buffered = io.BytesIO()
+                final_logo.save(buffered, format="PNG")
+                logo_data = base64.b64encode(buffered.getvalue()).decode()
+                
+            except Exception as e:
+                # Hata olursa orijinal logo'yu kullan
+                with open(logo_path, "rb") as f:
+                    logo_data = base64.b64encode(f.read()).decode()
             
             st.markdown(
                 f'''
@@ -302,24 +325,15 @@ class LoginView:
                     .logo-wrapper {{
                         text-align: center;
                         margin-bottom: 30px;
-                        padding: 20px;
+                        padding: 40px;
                     }}
                     .logo-wrapper img {{
-                        max-width: 200px;
+                        max-width: 300px;
                         width: 100%;
                         height: auto;
                         pointer-events: none;
                         display: inline-block;
-                        /* Damalı pattern'i gizlemek için arka plan ekle */
-                        background-color: #0e1117; /* Dark mode için */
                         border-radius: 10px;
-                        padding: 10px;
-                    }}
-                    /* Light mode için */
-                    @media (prefers-color-scheme: light) {{
-                        .logo-wrapper img {{
-                            background-color: #ffffff;
-                        }}
                     }}
                 </style>
                 <div class="logo-wrapper">
