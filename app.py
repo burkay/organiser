@@ -99,11 +99,58 @@ def verify_access_code(code):
             return False
         
         # Girilen kod ile MongoDB'deki şifreyi karşılaştır
-        return code == ayar["sifre"]
+        is_correct = code == ayar["sifre"]
+        
+        # Giriş denemesini logla
+        log_login_attempt(code, is_correct)
+        
+        return is_correct
         
     except Exception as e:
         st.error(f"Doğrulama hatası: {e}")
         return False
+
+def log_login_attempt(entered_code, success):
+    """Giriş denemelerini ziyaretci_loglari collection'ına kaydet"""
+    try:
+        db = get_db()
+        logs_coll = db.get_collection("ziyaretci_loglari")
+        
+        # IP adresi almaya çalış
+        ip_address = "unknown"
+        try:
+            # Streamlit Cloud headers'dan IP al
+            if hasattr(st, 'context') and hasattr(st.context, 'headers'):
+                ip_address = st.context.headers.get("X-Forwarded-For", "unknown")
+                if ip_address == "unknown":
+                    ip_address = st.context.headers.get("X-Real-IP", "unknown")
+        except:
+            pass
+        
+        # Session ID'yi al
+        session_id = "unknown"
+        try:
+            from streamlit.runtime.scriptrunner import get_script_run_ctx
+            ctx = get_script_run_ctx()
+            if ctx:
+                session_id = ctx.session_id
+        except:
+            pass
+        
+        # Log kaydı oluştur
+        log_entry = {
+            "ip_adresi": ip_address,
+            "girilen_sifre": entered_code,
+            "basarili": success,
+            "tarih_saat": datetime.now(),
+            "session_id": session_id
+        }
+        
+        logs_coll.insert_one(log_entry)
+        
+    except Exception as e:
+        # Loglama hatası uygulamayı durdurmamalı
+        pass  # Sessizce devam et
 
 # --- ANA UYGULAMA ---
 def main_app():
