@@ -3,3 +3,4 @@ Pillow
 pymongo
 python-docx
 streamlit>=1.54.0
+requests
