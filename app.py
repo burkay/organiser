@@ -1,30 +1,55 @@
 import sqlite3
+from flask import Flask, request, jsonify, render_template
 
-class Database:
-    def __init__(self, db_name):
-        self.connection = sqlite3.connect(db_name)
-        self.cursor = self.connection.cursor()
+app = Flask(__name__)
 
-    def create_table(self):
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY, name TEXT, done BOOLEAN)''')
-        self.connection.commit()
+# Connect to SQLite database
+DATABASE = 'documents.db'
 
-    def add_task(self, name):
-        self.cursor.execute('''INSERT INTO tasks (name, done) VALUES (?, ?)''', (name, False))
-        self.connection.commit()
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    return conn
 
-    def get_tasks(self):
-        self.cursor.execute('''SELECT * FROM tasks''')
-        return self.cursor.fetchall()
+# Create the database table for documents
+def init_db():
+    with app.app_context():
+        db = get_db()
+        db.execute('''CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            content TEXT NOT NULL
+        )''')
+        db.commit()
 
-    def close(self):
-        self.connection.close()
+init_db()
 
-# Example of using the Database class
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    content = file.read().decode('utf-8')
+    db = get_db()
+    db.execute('INSERT INTO documents (filename, content) VALUES (?, ?)', (file.filename, content))
+    db.commit()
+    return jsonify({'message': 'File uploaded successfully!'}), 200
+
+@app.route('/search', methods=['GET'])
+def search_documents():
+    query = request.args.get('query')
+    db = get_db()
+    cursor = db.execute('SELECT * FROM documents WHERE content LIKE ?', ('%' + query + '%',))
+    results = cursor.fetchall()
+    return jsonify(results), 200
+
+@app.route('/panel')
+def management_panel():
+    db = get_db()
+    cursor = db.execute('SELECT * FROM documents')
+    documents = cursor.fetchall()
+    return render_template('panel.html', documents=documents)
+
 if __name__ == '__main__':
-    db = Database('tasks.db')
-    db.create_table()
-    db.add_task('Example Task')
-    tasks = db.get_tasks()
-    print(tasks)
-    db.close()
+    app.run(debug=True)
