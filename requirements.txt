@@ -1,4 +1,4 @@
 pandas
 pymongo
 python-docx
-streamlit
+streamlit>=1.54.0
