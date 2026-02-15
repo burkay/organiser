@@ -21,79 +21,73 @@ st.set_page_config(
 def get_db():
     mongo_uri = st.secrets.get("MONGO_URI")
     if not mongo_uri:
-        st.error("MONGO_URI bulunamadı! Lütfen Secrets ayarlarına ekleyin.")
+        st.error("MONGO_URI secret'ı tanımlı değil. Streamlit Cloud'da ekleyin.")
         st.stop()
     return MongoClient(mongo_uri).get_database("organiser")
 
-def get_auth_codes_from_db():
-    """Şifreleri MongoDB'deki 'ayarlar' koleksiyonundan çeker."""
+def get_auth_password_from_db():
+    """Şifreyi MongoDB'den çeker."""
     try:
         db = get_db()
         ayarlar = db.get_collection("ayarlar").find_one({"tip": "giris_kontrol"})
-        return ayarlar if ayarlar else {}
+        return ayarlar.get("sifre") if ayarlar else "drysele" # DB'de yoksa yedek şifre
     except:
-        return {}
+        return "drysele"
 
-def log_ip_to_mongodb(ip, country, status="Başarılı"):
+def log_ip_to_mongodb(ip, status="Başarılı"):
+    """Giriş yapan IP'yi kaydeder."""
     try:
         db = get_db()
         logs_coll = db.get_collection("ziyaretci_loglari")
         logs_coll.insert_one({
             "ip": ip,
-            "ulke": country,
             "tarih": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "durum": status
         })
     except:
         pass
 
-# --- GÜVENLİK VE KONUM KONTROLÜ ---
-def get_user_info():
+# --- IP TESPİTİ (SADECE LOGLAMA İÇİN) ---
+def get_user_ip():
     try:
-        data = requests.get('https://ipapi.co/json/').json()
-        return {"ip": data.get("ip"), "country": data.get("country_code")}
+        # Sadece IP almak için hızlı bir servis
+        return requests.get('https://api.ipify.org?format=json', timeout=5).json().get("ip")
     except:
-        return {"ip": "0.0.0.0", "country": "UNKNOWN"}
+        return "0.0.0.0"
 
+# --- GÜVENLİK GİRİŞİ ---
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    user_info = get_user_info()
-    user_ip = user_info["ip"]
-    user_country = user_info["country"]
+    user_ip = get_user_ip()
     
-    izin_verilenler = ["TR", "BG"]
-
-    if user_country not in izin_verilenler:
-        st.error(f"Erişim Engellendi: Bölgeniz ({user_country}) yetkili değil.")
-        st.stop()
-
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_l, col_c, col_r = st.columns([1, 2, 1])
+    
     with col_c:
         if os.path.exists("logo.png"):
             st.image("logo.png", width=150)
         st.title("Güvenli Giriş")
-        st.info(f"📍 Bölge: {user_country} | 🌐 IP: {user_ip}")
+        st.info(f"🌐 IP Adresiniz: {user_ip}")
         
-        girilen_kod = st.text_input("Giriş Kodunu Yazın:", type="password")
+        girilen_kod = st.text_input("Lütfen Giriş Kodunu Yazın:", type="password")
         
         if st.button("Sisteme Eriş"):
-            # Şifreleri DB'den anlık çekiyoruz
-            db_codes = get_auth_codes_from_db()
-            beklenen_kod = db_codes.get(user_country)
+            dogru_sifre = get_auth_password_from_db()
             
-            if beklenen_kod and girilen_kod == beklenen_kod:
-                log_ip_to_mongodb(user_ip, user_country, "Başarılı")
+            if girilen_kod == dogru_sifre:
+                log_ip_to_mongodb(user_ip, "Başarılı")
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                log_ip_to_mongodb(user_ip, user_country, "Hatalı Şifre")
-                st.error("Kod geçersiz!")
+                log_ip_to_mongodb(user_ip, "Hatalı Şifre Denemesi")
+                st.error("Kod yanlış, erişim engellendi.")
     st.stop()
 
-# --- ANA UYGULAMA (Giriş Sonrası) ---
+# --- BURADAN AŞAĞISI ANA UYGULAMA (Giriş başarılıysa yüklenir) ---
+
+# Logo ve Başlık
 col_logo, col_title = st.columns([1, 8])
 with col_logo:
     if os.path.exists("logo.png"):
@@ -101,5 +95,5 @@ with col_logo:
 with col_title:
     st.title("🏛️ Müzayede Eser Havuzu")
 
-# ... (Geri kalan Word işleme ve listeleme kodların buraya gelecek) ...
-st.success("Sisteme başarıyla giriş yapıldı. Kediniz sizi bekliyor! 🐾")
+# Sidebar ve diğer fonksiyonlarını (parse_word_eserler vb.) buraya olduğu gibi ekleyebilirsin.
+st.success(f"Hoş geldiniz! IP adresiniz ({user_ip}) güvenlik amacıyla kaydedilmiştir.")
