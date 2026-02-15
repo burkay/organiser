@@ -1,6 +1,7 @@
 import base64
 import os
 import io
+import time
 import streamlit as st
 import pandas as pd
 from docx import Document
@@ -8,7 +9,11 @@ from pymongo import MongoClient
 from PIL import Image
 
 # Sayfa ayarları
-st.set_page_config(page_title="Müzayede Eser Havuzu", layout="wide", page_icon="logo.png")
+st.set_page_config(
+    page_title="Müzayede Eser Havuzu",
+    layout="wide",
+    page_icon="favicon.png" if os.path.exists("favicon.png") else "logo.png",
+)
 st.title("🏛️ Müzayede Eser Havuzu")
 
 # --- MONGODB ---
@@ -102,8 +107,12 @@ if uploaded_file is not None:
                 coll = get_eserler_collection()
                 for k in kayitlar:
                     k["dosya_adi"] = uploaded_file.name
-                coll.insert_many(kayitlar)
-                st.sidebar.success(f"{len(kayitlar)} eser veritabanına eklendi!")
+                t0 = time.perf_counter()
+                BATCH = 5000
+                for i in range(0, len(kayitlar), BATCH):
+                    coll.insert_many(kayitlar[i : i + BATCH])
+                sure = time.perf_counter() - t0
+                st.sidebar.success(f"{len(kayitlar)} eser {sure:.2f} saniyede veritabanina eklendi.")
             except Exception as e:
                 st.sidebar.error(f"Hata: {e}")
     else:
@@ -140,17 +149,22 @@ if sanatci_filtre:
     sorgu["sanatci"] = sanatci_filtre
 
 try:
+    t0 = time.perf_counter()
     items = list(coll.find(sorgu))
+    sure_db = time.perf_counter() - t0
 except Exception as e:
     st.error(f"Veritabanı hatası: {e}")
     items = []
+    sure_db = 0
+
+GOSTERIM_LIMITI = 2000
 
 if items:
+    t1 = time.perf_counter()
     df = pd.DataFrame(items).drop(columns=["_id"], errors="ignore")
     sutunlar = ["eser_adi", "sanatci", "sahip", "kategori", "depoda", "detay", "dosya_adi"]
     df = df[[c for c in sutunlar if c in df.columns]]
     df["depoda"] = df["depoda"].map(lambda x: "Evet" if x else "Hayır")
-    # Her satır = 1 eser. Türkçe başlıklar.
     df = df.rename(columns={
         "eser_adi": "Eser Adı",
         "sanatci": "Sanatçı",
@@ -160,8 +174,28 @@ if items:
         "detay": "Detay",
         "dosya_adi": "Dosya Adı",
     })
+    sure_islem = time.perf_counter() - t1
+    toplam = len(df)
+    gosterilen = min(toplam, GOSTERIM_LIMITI)
+    toplam_sure = sure_db + sure_islem
+
+    # Sonuc getirme performansi (one cikar)
+    st.markdown("---")
+    perf1, perf2, perf3, perf4 = st.columns(4)
+    with perf1:
+        st.metric("Sonuç getirme süresi", f"{toplam_sure:.2f} sn", help="Toplam: veritabanı + tabloya hazırlama")
+    with perf2:
+        st.metric("Veritabanı (MongoDB)", f"{sure_db:.2f} sn", help="find() + list() — arama/filtre sorgusu")
+    with perf3:
+        st.metric("Tabloya hazırlama", f"{sure_islem:.2f} sn", help="DataFrame + sütun düzeni")
+    with perf4:
+        st.metric("Sonuç sayısı", f"{toplam:,}", help="Eşleşen kayıt sayısı")
+    st.markdown("---")
+
     st.caption("Her satır bir eseri temsil eder.")
-    st.write(f"**{len(df)}** eser bulundu.")
+    if toplam > GOSTERIM_LIMITI:
+        st.info(f"Tabloda ilk **{gosterilen}** kayıt gösteriliyor (toplam {toplam}).")
+        df = df.head(GOSTERIM_LIMITI)
     st.dataframe(df, use_container_width=True)
 else:
     st.info(
