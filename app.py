@@ -500,6 +500,7 @@ class MainView:
         gorsel_yukle = st.session_state.get("gorsel_yukle_tercih", True)
 
         try:
+            t_baslangic = time.perf_counter()
             with st.sidebar:
                 fresh_bytes = io.BytesIO(st.session_state[file_key])
                 doc = Document(fresh_bytes)
@@ -527,21 +528,19 @@ class MainView:
             for k in kayitlar:
                 k["dosya_adi"] = dosya_adi
 
-            t0 = time.perf_counter()
             self.eserler_repo.insert_many(kayitlar)
-            sure = time.perf_counter() - t0
+            sure_toplam = time.perf_counter() - t_baslangic
 
-            st.sidebar.success(f"✅ {len(kayitlar)} eser {sure:.2f} sn'de eklendi.")
+            st.sidebar.success(f"✅ {len(kayitlar)} eser {sure_toplam:.2f} sn'de eklendi.")
             del st.session_state[file_key]
 
         except Exception as e:
             st.sidebar.error(f"Hata: {e}")
         finally:
             st.session_state["yukleniyor"] = False
+            st.rerun()
 
     def _render_search(self):
-        st.subheader("🔍 Eserlerde Ara ve Filtrele")
-
         col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
             search_query = st.text_input(
@@ -581,86 +580,114 @@ class MainView:
 
     def _show_results(self, sorgu):
         try:
-            t0 = time.perf_counter()
             items = self.eserler_repo.search(sorgu)
-            sure_db = time.perf_counter() - t0
         except Exception as e:
             st.error(f"Veritabanı hatası: {e}")
             items = []
-            sure_db = 0
+
+        toplam = len(items)
+        st.subheader(f"🔍 {toplam:,} Eserde Ara" if toplam else "🔍 Eserlerde Ara")
 
         if items:
-            self._display_results(items, sure_db)
+            self._display_results(items)
         else:
             st.info(
                 "Sonuç bulunamadı. Sol taraftan .docx dosyası yükleyip "
                 "'Eserleri Veritabanına Ekle' ile havuzu doldurun."
             )
 
-    def _display_results(self, items, sure_db):
-        t1 = time.perf_counter()
+    def _display_results(self, items):
         toplam = len(items)
-
         if toplam > self.GOSTERIM_LIMITI:
             st.info(f"İlk **{self.GOSTERIM_LIMITI}** kayıt gösteriliyor (toplam {toplam}).")
             items = items[:self.GOSTERIM_LIMITI]
 
-        sure_islem = time.perf_counter() - t1
-        self._show_metrics(sure_db, sure_islem, toplam)
+        # Modal state
+        if "modal_idx" not in st.session_state:
+            st.session_state.modal_idx = None
 
-        # Görsel olan ve olmayan eserler: kart görünümü
-        self._render_cards(items)
+        # Modal açıksa göster
+        if st.session_state.modal_idx is not None:
+            idx = st.session_state.modal_idx
+            if 0 <= idx < len(items):
+                self._render_modal(items[idx])
+            return
 
-    def _render_cards(self, items):
-        """Her eseri görsel + bilgi kartı olarak göster."""
-        cols = st.columns(self.KART_KOLONLARI)
+        # Liste görünümü
+        self._render_list(items)
+
+    def _render_modal(self, item):
+        """Eser detay modal — overlay + kart."""
+        gorsel_url = item.get("gorsel_url", "")
+        lot  = item.get("lot_no", "")
+        ad   = item.get("eser_adi") or "—"
+        san  = item.get("sanatci") or "—"
+        sah  = item.get("sahip") or "—"
+        det  = item.get("detay") or "—"
+        dosya = item.get("dosya_adi") or ""
+
+        img_html = (
+            f"<img src='{gorsel_url}' style='max-width:100%;max-height:60vh;"
+            f"border-radius:8px;display:block;margin:0 auto 1rem;'/>"
+            if gorsel_url else
+            "<div style='height:200px;background:#2a2a2a;border-radius:8px;"
+            "display:flex;align-items:center;justify-content:center;"
+            "color:#555;font-size:3rem;margin-bottom:1rem;'>🖼</div>"
+        )
+
+        st.markdown(f"""
+        <style>
+        .modal-overlay {{
+            position:fixed; inset:0; background:rgba(0,0,0,0.75);
+            z-index:999; display:flex; align-items:center; justify-content:center;
+        }}
+        .modal-box {{
+            background:#1e1e1e; color:#f0f0f0; border-radius:12px;
+            padding:2rem; max-width:600px; width:90%; max-height:90vh;
+            overflow-y:auto; box-shadow:0 8px 40px rgba(0,0,0,0.6);
+        }}
+        .modal-box h2 {{ color:#fff; margin-bottom:0.25rem; }}
+        .modal-box .sub {{ color:#aaa; font-style:italic; margin-bottom:1rem; }}
+        .modal-box .row {{ display:flex; gap:0.5rem; margin-bottom:0.5rem; }}
+        .modal-box .label {{ color:#888; min-width:70px; }}
+        .modal-box .val {{ color:#ddd; }}
+        </style>
+        <div class="modal-overlay">
+          <div class="modal-box">
+            {img_html}
+            <h2>Lot {lot} · {ad}</h2>
+            <p class="sub">{san}</p>
+            <div class="row"><span class="label">Sahip</span><span class="val">{sah}</span></div>
+            <div class="row"><span class="label">Detay</span><span class="val">{det}</span></div>
+            <div class="row"><span class="label">Dosya</span><span class="val">{dosya}</span></div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("✕ Kapat", type="primary"):
+            st.session_state.modal_idx = None
+            st.rerun()
+
+    def _render_list(self, items):
+        """Satır satır liste görünümü."""
+        # Başlık satırı
+        h1, h2, h3, h4, h5 = st.columns([1, 4, 3, 3, 2])
+        h1.markdown("**Lot**")
+        h2.markdown("**Eser Adı**")
+        h3.markdown("**Sanatçı**")
+        h4.markdown("**Sahip**")
+        h5.markdown("")
+        st.divider()
+
         for idx, item in enumerate(items):
-            col = cols[idx % self.KART_KOLONLARI]
-            with col:
-                gorsel_url = item.get("gorsel_url", "")
-                if gorsel_url:
-                    st.markdown(
-                        f"<img src='{gorsel_url}' style='width:100%;border-radius:6px;'/>",
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        "<div style='height:160px;background:#f0f0f0;border-radius:6px;"
-                        "display:flex;align-items:center;justify-content:center;"
-                        "color:#aaa;font-size:2rem;'>🖼</div>",
-                        unsafe_allow_html=True
-                    )
-
-                lot  = item.get("lot_no", "")
-                ad   = item.get("eser_adi") or "—"
-                san  = item.get("sanatci") or "—"
-                sah  = item.get("sahip") or "—"
-                det  = item.get("detay") or ""
-                dosya = item.get("dosya_adi") or ""
-
-                st.markdown(
-                    f"**Lot {lot} · {ad}**  \n"
-                    f"*{san}*  \n"
-                    f"<small style='color:#888'>{sah}</small>  \n"
-                    f"<small>{det}</small>  \n"
-                    f"<small style='color:#bbb'>{dosya}</small>",
-                    unsafe_allow_html=True
-                )
-                st.markdown("---")
-
-    def _show_metrics(self, sure_db, sure_islem, toplam):
-        st.markdown("---")
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("Toplam süre", f"{sure_db + sure_islem:.2f} sn",
-                      help="Veritabanı + render")
-        with c2:
-            st.metric("Veritabanı (MongoDB)", f"{sure_db:.2f} sn", help="find() sorgusu")
-        with c3:
-            st.metric("Hazırlama", f"{sure_islem:.2f} sn")
-        with c4:
-            st.metric("Sonuç sayısı", f"{toplam:,}")
-        st.markdown("---")
+            c1, c2, c3, c4, c5 = st.columns([1, 4, 3, 3, 2])
+            c1.write(item.get("lot_no", ""))
+            c2.write(item.get("eser_adi") or "—")
+            c3.write(item.get("sanatci") or "—")
+            c4.write(item.get("sahip") or "—")
+            if c5.button("Detay", key=f"detay_{idx}"):
+                st.session_state.modal_idx = idx
+                st.rerun()
 
 
 # ==================== APPLICATION ====================
