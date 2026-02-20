@@ -602,22 +602,15 @@ class MainView:
             st.info(f"İlk **{self.GOSTERIM_LIMITI}** kayıt gösteriliyor (toplam {toplam}).")
             items = items[:self.GOSTERIM_LIMITI]
 
-        # Modal state
-        if "modal_idx" not in st.session_state:
-            st.session_state.modal_idx = None
+        # Seçili eser varsa dialog aç
+        if st.session_state.get("secili_eser") is not None:
+            self._render_dialog(st.session_state["secili_eser"])
 
-        # Modal açıksa göster
-        if st.session_state.modal_idx is not None:
-            idx = st.session_state.modal_idx
-            if 0 <= idx < len(items):
-                self._render_modal(items[idx])
-            return
-
-        # Liste görünümü
         self._render_list(items)
 
-    def _render_modal(self, item):
-        """Eser detay modal — overlay + kart."""
+    @st.dialog("Eser Detayı", width="large")
+    def _render_dialog(self, item):
+        """st.dialog ile native modal — kapat butonu otomatik gelir."""
         gorsel_url = item.get("gorsel_url", "")
         lot  = item.get("lot_no", "")
         ad   = item.get("eser_adi") or "—"
@@ -626,51 +619,30 @@ class MainView:
         det  = item.get("detay") or "—"
         dosya = item.get("dosya_adi") or ""
 
-        img_html = (
-            f"<img src='{gorsel_url}' style='max-width:100%;max-height:60vh;"
-            f"border-radius:8px;display:block;margin:0 auto 1rem;'/>"
-            if gorsel_url else
-            "<div style='height:200px;background:#2a2a2a;border-radius:8px;"
-            "display:flex;align-items:center;justify-content:center;"
-            "color:#555;font-size:3rem;margin-bottom:1rem;'>🖼</div>"
-        )
+        if gorsel_url:
+            st.markdown(
+                f"<img src='{gorsel_url}' style='max-width:100%;border-radius:8px;"
+                f"display:block;margin:0 auto 1rem;'/>",
+                unsafe_allow_html=True
+            )
 
-        st.markdown(f"""
-        <style>
-        .modal-overlay {{
-            position:fixed; inset:0; background:rgba(0,0,0,0.75);
-            z-index:999; display:flex; align-items:center; justify-content:center;
-        }}
-        .modal-box {{
-            background:#1e1e1e; color:#f0f0f0; border-radius:12px;
-            padding:2rem; max-width:600px; width:90%; max-height:90vh;
-            overflow-y:auto; box-shadow:0 8px 40px rgba(0,0,0,0.6);
-        }}
-        .modal-box h2 {{ color:#fff; margin-bottom:0.25rem; }}
-        .modal-box .sub {{ color:#aaa; font-style:italic; margin-bottom:1rem; }}
-        .modal-box .row {{ display:flex; gap:0.5rem; margin-bottom:0.5rem; }}
-        .modal-box .label {{ color:#888; min-width:70px; }}
-        .modal-box .val {{ color:#ddd; }}
-        </style>
-        <div class="modal-overlay">
-          <div class="modal-box">
-            {img_html}
-            <h2>Lot {lot} · {ad}</h2>
-            <p class="sub">{san}</p>
-            <div class="row"><span class="label">Sahip</span><span class="val">{sah}</span></div>
-            <div class="row"><span class="label">Detay</span><span class="val">{det}</span></div>
-            <div class="row"><span class="label">Dosya</span><span class="val">{dosya}</span></div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"### Lot {lot} · {ad}")
+        st.markdown(f"*{san}*")
+        st.divider()
+        col1, col2 = st.columns([1, 3])
+        col1.markdown("**Sahip**")
+        col2.markdown(sah)
+        col1.markdown("**Detay**")
+        col2.markdown(det)
+        col1.markdown("**Dosya**")
+        col2.markdown(f"<small style='color:#888'>{dosya}</small>", unsafe_allow_html=True)
 
-        if st.button("✕ Kapat", type="primary"):
-            st.session_state.modal_idx = None
+        if st.button("Kapat", use_container_width=False):
+            st.session_state["secili_eser"] = None
             st.rerun()
 
     def _render_list(self, items):
         """Satır satır liste görünümü."""
-        # Başlık satırı
         h1, h2, h3, h4, h5 = st.columns([1, 4, 3, 3, 2])
         h1.markdown("**Lot**")
         h2.markdown("**Eser Adı**")
@@ -686,7 +658,7 @@ class MainView:
             c3.write(item.get("sanatci") or "—")
             c4.write(item.get("sahip") or "—")
             if c5.button("Detay", key=f"detay_{idx}"):
-                st.session_state.modal_idx = idx
+                st.session_state["secili_eser"] = item
                 st.rerun()
 
 
