@@ -438,11 +438,7 @@ class MainView:
             help="Sadece .docx formatı kabul edilir."
         )
 
-        gorsel_yukle = st.sidebar.checkbox(
-            "Görselleri Cloudinary'e yükle",
-            value=True,
-            help="İşaretli değilse görseller atlanır, yükleme hızlanır."
-        )
+        gorsel_yukle = st.sidebar.checkbox("Görselleri yükle", value=True)
 
         if uploaded_file:
             self._handle_file_upload(uploaded_file, gorsel_yukle)
