@@ -222,34 +222,30 @@ class MuzayedeParser:
 
     Her eser bloğunun yapısı (XML sırası):
       <p>  →  Görsel (w:drawing içeren paragraf)
-      <p>  →  Galeri / Sahip    ("Antik" veya "5966- Levent Gürel")
-      <p>  →  Sanatçı + yıl     ("Ertuğrul Ateş (1954)")
+      <p>  →  Galeri / Sahip  (görsel hemen arkasındaki ilk dolu satır)
+      <p>  →  Sanatçı + yıl
       <p>  →  Eser adı
       <p>  →  Teknik detaylar
       <p>  →  (opsiyonel) Satış fiyatı  →  sadece DB'ye, UI'da gizli
+
+    Sahip satırı ayrıca _is_sahip testi yapılmaz;
+    görsel paragrafının hemen arkasından gelen ilk dolu satır sahip olarak alınır.
+    Bu yaklaşım tüm format varyasyonlarını kapsar.
     """
 
-    @staticmethod
-    def _is_sahip(text: str) -> bool:
-        if re.match(r'^\d{3,6}-\s*.+', text):
-            return True
-        if text.strip() in ("Antik", "Galeri", "Özel Koleksiyon"):
-            return True
-        return False
+    _BLIP_ATTR = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed'
 
     @staticmethod
     def _is_fiyat(text: str) -> bool:
         return bool(re.search(r'\d[\d\.,]+\s*(TL|₺)', text, re.IGNORECASE))
 
-    @staticmethod
-    def _extract_image_bytes(para_elem, doc_part) -> bytes | None:
+    @classmethod
+    def _extract_image_bytes(cls, para_elem, doc_part):
         """Paragraf elementinden embed görsel byte'larını çıkar."""
         blips = para_elem.findall('.//' + qn('a:blip'))
         if not blips:
             return None
-        rId = blips[0].get(
-            '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed'
-        )
+        rId = blips[0].get(cls._BLIP_ATTR)
         if not rId or rId not in doc_part.rels:
             return None
         try:
@@ -258,18 +254,19 @@ class MuzayedeParser:
             return None
 
     @classmethod
-    def parse(cls, doc: Document, upload_images: bool = False) -> list[dict]:
+    def parse(cls, doc: Document, upload_images: bool = False) -> list:
         """
         Document nesnesini parse et; eser listesi döndür.
 
+        Görsel paragrafı → hemen arkasındaki ilk dolu satır sahip olarak alınır.
+        Bu yaklaşım sahip satırındaki tüm format farklılıklarını kapsar.
+
         upload_images=True → görselleri Cloudinary'e yükler ve gorsel_url ekler.
-        upload_images=False → gorsel_url alanı boş kalır (hızlı önizleme için).
+        upload_images=False → gorsel_url boş kalır (hızlı önizleme).
         """
         body_children = list(doc.element.body)
         doc_part      = doc.part
 
-        # Body child'larını (paragraf XML elementleri) tara
-        # Her child'ın metnini ve görsel içerip içermediğini tespit et
         nodes = []
         for child in body_children:
             texts  = child.findall('.//' + qn('w:t'))
@@ -277,76 +274,79 @@ class MuzayedeParser:
             is_img = bool(child.findall('.//' + qn('w:drawing')))
             nodes.append({"elem": child, "text": text, "is_img": is_img})
 
-        artworks     = []
-        lot_counter  = 0
-        i            = 0
+        artworks    = []
+        lot_counter = 0
+        i           = 0
 
         while i < len(nodes):
             node = nodes[i]
 
-            # Görsel paragrafı bul → hemen arkasından sahip satırı gelmeli
-            if node["is_img"]:
-                img_elem = node["elem"]
-                # Sonraki dolu text node'u bul
-                j = i + 1
-                while j < len(nodes) and not nodes[j]["text"]:
-                    j += 1
+            if not node["is_img"]:
+                i += 1
+                continue
 
-                if j < len(nodes) and cls._is_sahip(nodes[j]["text"]):
-                    lot_counter += 1
-                    sahip = nodes[j]["text"]
+            img_elem = node["elem"]
 
-                    # Devamındaki satırları topla
-                    lines = []
-                    k = j + 1
-                    while k < len(nodes) and len(lines) < 6:
-                        t = nodes[k]["text"]
-                        if t:
-                            if nodes[k]["is_img"] or cls._is_sahip(t):
-                                break
-                            lines.append(t)
-                        else:
-                            if k + 1 < len(nodes) and not nodes[k + 1]["text"]:
-                                break
-                        k += 1
+            # Görsel sonrası ilk anlamlı node'u bul
+            j = i + 1
+            while j < len(nodes) and not nodes[j]["text"] and not nodes[j]["is_img"]:
+                j += 1
 
-                    sanatci  = lines[0] if len(lines) > 0 else ""
-                    eser_adi = lines[1] if len(lines) > 1 else ""
-                    detay    = lines[2] if len(lines) > 2 else ""
+            # Sonraki anlamlı node başka bir görselsse bu görsel başlıksız, atla
+            if j >= len(nodes) or nodes[j]["is_img"]:
+                i += 1
+                continue
 
-                    satis_fiyati = ""
-                    for ln in reversed(lines[2:]):
-                        if cls._is_fiyat(ln):
-                            satis_fiyati = ln
-                            break
+            lot_counter += 1
+            sahip = nodes[j]["text"]
 
-                    # Görsel yükleme
-                    gorsel_url = ""
-                    if upload_images:
-                        img_bytes = cls._extract_image_bytes(img_elem, doc_part)
-                        if img_bytes:
-                            public_id = f"lot_{lot_counter}"
-                            try:
-                                gorsel_url = CloudinaryService.upload(img_bytes, public_id)
-                            except Exception as e:
-                                st.warning(f"Lot {lot_counter} görseli yüklenemedi: {e}")
+            # Devamındaki satırları topla (bir sonraki görsele kadar)
+            lines = []
+            k = j + 1
+            while k < len(nodes) and len(lines) < 6:
+                if nodes[k]["is_img"]:
+                    break
+                t = nodes[k]["text"]
+                if t:
+                    lines.append(t)
+                else:
+                    # İki ardışık boş satır → blok sonu
+                    if k + 1 < len(nodes) and not nodes[k + 1]["text"]:
+                        break
+                k += 1
 
-                    artworks.append({
-                        "lot_no":       lot_counter,
-                        "sahip":        sahip,
-                        "sanatci":      sanatci,
-                        "eser_adi":     eser_adi,
-                        "detay":        detay,
-                        "gorsel_url":   gorsel_url,
-                        "satis_fiyati": satis_fiyati,
-                    })
-                    i = k
-                    continue
+            sanatci  = lines[0] if len(lines) > 0 else ""
+            eser_adi = lines[1] if len(lines) > 1 else ""
+            detay    = lines[2] if len(lines) > 2 else ""
 
-            i += 1
+            satis_fiyati = ""
+            for ln in reversed(lines[2:]):
+                if cls._is_fiyat(ln):
+                    satis_fiyati = ln
+                    break
+
+            gorsel_url = ""
+            if upload_images:
+                img_bytes = cls._extract_image_bytes(img_elem, doc_part)
+                if img_bytes:
+                    public_id = f"lot_{lot_counter}"
+                    try:
+                        gorsel_url = CloudinaryService.upload(img_bytes, public_id)
+                    except Exception as e:
+                        st.warning(f"Lot {lot_counter} görseli yüklenemedi: {e}")
+
+            artworks.append({
+                "lot_no":       lot_counter,
+                "sahip":        sahip,
+                "sanatci":      sanatci,
+                "eser_adi":     eser_adi,
+                "detay":        detay,
+                "gorsel_url":   gorsel_url,
+                "satis_fiyati": satis_fiyati,
+            })
+            i = k
 
         return artworks
-
 
 # ==================== PRESENTATION LAYER ====================
 
