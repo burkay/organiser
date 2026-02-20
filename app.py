@@ -377,7 +377,7 @@ class LoginView:
             except Exception:
                 pass
 
-        st.title("🔐 Müzayede Eser Havuzu - Giriş")
+        st.title("🔐 Giriş")
         st.markdown("---")
 
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -428,7 +428,7 @@ class MainView:
             if st.button("🚪 Çıkış"):
                 SessionManager.logout()
                 st.rerun()
-        st.title("🏛️ Müzayede Eser Havuzu")
+        st.title("🏛️")
 
     def _render_sidebar(self):
         st.sidebar.header("📤 Eser Dosyası Yükleme")
@@ -704,7 +704,7 @@ class Application:
     @staticmethod
     def _setup_page():
         st.set_page_config(
-            page_title="Müzayede Eser Havuzu",
+            page_title="SeleSys",
             layout="wide",
             page_icon="favicon.png" if os.path.exists("favicon.png") else "logo.png",
         )
