@@ -453,7 +453,15 @@ class MainView:
 
     def _handle_file_upload(self, uploaded_file, gorsel_yukle: bool):
         try:
-            doc = Document(uploaded_file)
+            # Dosyayı session_state'e kaydet — butona basıldığında Streamlit
+            # sayfayı rerun eder ve uploaded_file stream'i sıfırlanır.
+            # session_state ile BytesIO rerun'lar arasında yaşar.
+            file_key = f"docx_bytes_{uploaded_file.name}"
+            if file_key not in st.session_state:
+                st.session_state[file_key] = uploaded_file.read()
+
+            file_bytes = io.BytesIO(st.session_state[file_key])
+            doc = Document(file_bytes)
             kayitlar = MuzayedeParser.parse(doc, upload_images=False)  # önizleme
 
             if not kayitlar:
@@ -463,7 +471,6 @@ class MainView:
                 )
                 return
 
-            gorsel_sayisi = sum(1 for k in kayitlar if k.get("gorsel_url") == "")
             st.sidebar.success(
                 f"Toplam **{len(kayitlar)}** eser bulundu. "
                 f"Eklemek için butona tıklayın."
@@ -471,11 +478,12 @@ class MainView:
 
             if st.sidebar.button("Eserleri Veritabanına Ekle"):
                 try:
-                    # Görselleri yükleyerek tekrar parse et
                     with st.sidebar:
                         with st.spinner("Görseller Cloudinary'e yükleniyor..."):
-                            doc.element  # zaten bellekte
-                            kayitlar = MuzayedeParser.parse(doc, upload_images=gorsel_yukle)
+                            # session_state'teki bytes'tan taze Document aç
+                            fresh_bytes = io.BytesIO(st.session_state[file_key])
+                            doc2 = Document(fresh_bytes)
+                            kayitlar = MuzayedeParser.parse(doc2, upload_images=gorsel_yukle)
 
                     for k in kayitlar:
                         k["dosya_adi"] = uploaded_file.name
@@ -489,6 +497,9 @@ class MainView:
                         f"{len(kayitlar)} eser {sure:.2f} sn'de eklendi. "
                         f"({gorsel_eklenen} görsel Cloudinary'e yüklendi)"
                     )
+                    # İşlem bitti, session_state'i temizle
+                    del st.session_state[file_key]
+
                 except Exception as e:
                     st.sidebar.error(f"Hata: {e}")
 
