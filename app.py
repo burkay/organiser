@@ -373,7 +373,7 @@ class LoginView:
             try:
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
-                    st.image(logo_path, use_container_width=True)
+                    st.image(logo_path, width='stretch')
             except Exception:
                 pass
 
@@ -390,7 +390,7 @@ class LoginView:
                     placeholder="Erişim kodunu girin ve Enter'a basın...",
                     key="access_code_input"
                 )
-                submitted = st.form_submit_button("Giriş Yap", use_container_width=True)
+                submitted = st.form_submit_button("Giriş Yap", width='stretch')
                 if submitted and access_code:
                     if self.auth_service.verify_code(access_code):
                         SessionManager.login()
