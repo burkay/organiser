@@ -4,3 +4,4 @@ pymongo
 dnspython
 python-docx
 streamlit>=1.54.0
+cloudinary
