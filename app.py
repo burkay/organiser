@@ -615,7 +615,10 @@ class MainView:
             with col:
                 gorsel_url = item.get("gorsel_url", "")
                 if gorsel_url:
-                    st.image(gorsel_url, use_container_width=True)
+                    st.markdown(
+                        f"<img src='{gorsel_url}' style='width:100%;border-radius:6px;'/>",
+                        unsafe_allow_html=True
+                    )
                 else:
                     st.markdown(
                         "<div style='height:160px;background:#f0f0f0;border-radius:6px;"
