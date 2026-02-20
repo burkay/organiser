@@ -367,31 +367,15 @@ class LoginView:
         self.auth_service = auth_service
 
     def render(self):
+        # Logo varsa st.image ile göster (unsafe_allow_html gerektirmez)
         logo_path = "logo.png"
         if os.path.exists(logo_path):
             try:
-                logo_img = Image.open(logo_path).convert("RGBA")
-                background = Image.new("RGBA", logo_img.size, (14, 17, 23, 255))
-                background.paste(logo_img, (0, 0), logo_img)
-                final_logo = background.convert("RGB")
-                buffered = io.BytesIO()
-                final_logo.save(buffered, format="PNG")
-                logo_data = base64.b64encode(buffered.getvalue()).decode()
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.image(logo_path, use_container_width=True)
             except Exception:
-                with open(logo_path, "rb") as f:
-                    logo_data = base64.b64encode(f.read()).decode()
-
-            st.markdown(
-                f'''<style>
-                    .logo-wrapper {{ text-align:center; margin-bottom:30px; padding:40px; }}
-                    .logo-wrapper img {{ max-width:300px; width:100%; height:auto;
-                                        pointer-events:none; display:inline-block; border-radius:10px; }}
-                </style>
-                <div class="logo-wrapper">
-                    <img src="data:image/png;base64,{logo_data}" alt="Logo" />
-                </div>''',
-                unsafe_allow_html=True
-            )
+                pass
 
         st.title("🔐 Müzayede Eser Havuzu - Giriş")
         st.markdown("---")
