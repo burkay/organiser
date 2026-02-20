@@ -254,15 +254,18 @@ class MuzayedeParser:
             return None
 
     @classmethod
-    def parse(cls, doc: Document, upload_images: bool = False) -> list:
+    def parse(cls, doc: Document, upload_images: bool = False,
+              progress_callback=None) -> list:
         """
         Document nesnesini parse et; eser listesi döndür.
 
         Görsel paragrafı → hemen arkasındaki ilk dolu satır sahip olarak alınır.
         Bu yaklaşım sahip satırındaki tüm format farklılıklarını kapsar.
 
-        upload_images=True → görselleri Cloudinary'e yükler ve gorsel_url ekler.
-        upload_images=False → gorsel_url boş kalır (hızlı önizleme).
+        upload_images=True    → görselleri Cloudinary'e yükler ve gorsel_url ekler.
+        upload_images=False   → gorsel_url boş kalır (hızlı önizleme).
+        progress_callback     → her eser işlenince callback(done, total) çağrılır.
+                                 İlk geçişte total bilinmediği için None geçilebilir.
         """
         body_children = list(doc.element.body)
         doc_part      = doc.part
@@ -273,6 +276,12 @@ class MuzayedeParser:
             text   = ''.join(t.text or '' for t in texts).strip()
             is_img = bool(child.findall('.//' + qn('w:drawing')))
             nodes.append({"elem": child, "text": text, "is_img": is_img})
+
+        # Toplam eser sayısını önceden hesapla (progress için)
+        toplam_eser = sum(
+            1 for idx, nd in enumerate(nodes)
+            if nd["is_img"] and idx + 1 < len(nodes)
+        )
 
         artworks    = []
         lot_counter = 0
@@ -292,7 +301,7 @@ class MuzayedeParser:
             while j < len(nodes) and not nodes[j]["text"] and not nodes[j]["is_img"]:
                 j += 1
 
-            # Sonraki anlamlı node başka bir görselsse bu görsel başlıksız, atla
+            # Sonraki anlamlı node başka bir görsel ise bu görsel başlıksız, atla
             if j >= len(nodes) or nodes[j]["is_img"]:
                 i += 1
                 continue
@@ -310,7 +319,6 @@ class MuzayedeParser:
                 if t:
                     lines.append(t)
                 else:
-                    # İki ardışık boş satır → blok sonu
                     if k + 1 < len(nodes) and not nodes[k + 1]["text"]:
                         break
                 k += 1
@@ -344,6 +352,10 @@ class MuzayedeParser:
                 "gorsel_url":   gorsel_url,
                 "satis_fiyati": satis_fiyati,
             })
+
+            if progress_callback:
+                progress_callback(lot_counter, toplam_eser)
+
             i = k
 
         return artworks
@@ -479,11 +491,31 @@ class MainView:
             if st.sidebar.button("Eserleri Veritabanına Ekle"):
                 try:
                     with st.sidebar:
-                        with st.spinner("Görseller Cloudinary'e yükleniyor..."):
-                            # session_state'teki bytes'tan taze Document aç
-                            fresh_bytes = io.BytesIO(st.session_state[file_key])
-                            doc2 = Document(fresh_bytes)
-                            kayitlar = MuzayedeParser.parse(doc2, upload_images=gorsel_yukle)
+                        # session_state'teki bytes'tan taze Document aç
+                        fresh_bytes = io.BytesIO(st.session_state[file_key])
+                        doc2 = Document(fresh_bytes)
+
+                        # Görselsiz önce parse et (lot sayısını bil)
+                        kayitlar_on = MuzayedeParser.parse(doc2, upload_images=False)
+                        toplam = len(kayitlar_on)
+
+                        st.markdown("**Eserler yükleniyor...**")
+                        progress_bar = st.progress(0)
+                        durum_yazisi = st.empty()
+
+                        # Görsel yüklemeyi tek tek yap, progress göster
+                        fresh_bytes2 = io.BytesIO(st.session_state[file_key])
+                        doc3 = Document(fresh_bytes2)
+                        kayitlar = MuzayedeParser.parse(
+                            doc3,
+                            upload_images=gorsel_yukle,
+                            progress_callback=lambda done, total: (
+                                progress_bar.progress(done / total),
+                                durum_yazisi.caption(f"{done} / {total} eser işlendi")
+                            )
+                        )
+                        progress_bar.progress(1.0)
+                        durum_yazisi.caption(f"{toplam} / {toplam} eser işlendi")
 
                     for k in kayitlar:
                         k["dosya_adi"] = uploaded_file.name
@@ -492,12 +524,9 @@ class MainView:
                     self.eserler_repo.insert_many(kayitlar)
                     sure = time.perf_counter() - t0
 
-                    gorsel_eklenen = sum(1 for k in kayitlar if k.get("gorsel_url"))
                     st.sidebar.success(
-                        f"{len(kayitlar)} eser {sure:.2f} sn'de eklendi. "
-                        f"({gorsel_eklenen} görsel Cloudinary'e yüklendi)"
+                        f"✅ {len(kayitlar)} eser {sure:.2f} sn'de eklendi."
                     )
-                    # İşlem bitti, session_state'i temizle
                     del st.session_state[file_key]
 
                 except Exception as e:
