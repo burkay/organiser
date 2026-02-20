@@ -411,7 +411,12 @@ class MainView:
 
     def render(self):
         self._render_header()
-        self._render_sidebar()
+        # Yükleme aktifse önce işlemi tamamla, sonra normal UI'ı göster
+        if st.session_state.get("yukleniyor", False):
+            self._render_sidebar()
+            self._do_upload()
+        else:
+            self._render_sidebar()
         self._render_search()
 
     def _render_header(self):
@@ -432,29 +437,35 @@ class MainView:
             "Her sayfa bir eser: Sahip · Sanatçı · Eser Adı · Detay · (Fiyat)"
         )
 
+        # Yükleme devam ediyorsa dosya seçimi ve checkbox deaktif
+        yukleniyor = st.session_state.get("yukleniyor", False)
+
         uploaded_file = st.sidebar.file_uploader(
             "Word dosyası seçin (.docx)",
             type=["docx"],
-            help="Sadece .docx formatı kabul edilir."
+            help="Sadece .docx formatı kabul edilir.",
+            disabled=yukleniyor,
         )
 
-        gorsel_yukle = st.sidebar.checkbox("Görselleri yükle", value=True)
+        gorsel_yukle = st.sidebar.checkbox(
+            "Görselleri yükle", value=True, disabled=yukleniyor
+        )
 
-        if uploaded_file:
+        if uploaded_file and not yukleniyor:
             self._handle_file_upload(uploaded_file, gorsel_yukle)
+
+        if yukleniyor:
+            st.sidebar.info("⏳ Yükleme devam ediyor, lütfen bekleyin...")
 
     def _handle_file_upload(self, uploaded_file, gorsel_yukle: bool):
         try:
-            # Dosyayı session_state'e kaydet — butona basıldığında Streamlit
-            # sayfayı rerun eder ve uploaded_file stream'i sıfırlanır.
-            # session_state ile BytesIO rerun'lar arasında yaşar.
             file_key = f"docx_bytes_{uploaded_file.name}"
             if file_key not in st.session_state:
                 st.session_state[file_key] = uploaded_file.read()
 
             file_bytes = io.BytesIO(st.session_state[file_key])
             doc = Document(file_bytes)
-            kayitlar = MuzayedeParser.parse(doc, upload_images=False)  # önizleme
+            kayitlar = MuzayedeParser.parse(doc, upload_images=False)
 
             if not kayitlar:
                 st.sidebar.warning(
@@ -468,52 +479,65 @@ class MainView:
                 f"Eklemek için butona tıklayın."
             )
 
-            if st.sidebar.button("Eserleri Veritabanına Ekle"):
-                try:
-                    with st.sidebar:
-                        # session_state'teki bytes'tan taze Document aç
-                        fresh_bytes = io.BytesIO(st.session_state[file_key])
-                        doc2 = Document(fresh_bytes)
-
-                        # Görselsiz önce parse et (lot sayısını bil)
-                        kayitlar_on = MuzayedeParser.parse(doc2, upload_images=False)
-                        toplam = len(kayitlar_on)
-
-                        st.markdown("**Eserler yükleniyor...**")
-                        progress_bar = st.progress(0)
-                        durum_yazisi = st.empty()
-
-                        # Görsel yüklemeyi tek tek yap, progress göster
-                        fresh_bytes2 = io.BytesIO(st.session_state[file_key])
-                        doc3 = Document(fresh_bytes2)
-                        kayitlar = MuzayedeParser.parse(
-                            doc3,
-                            upload_images=gorsel_yukle,
-                            progress_callback=lambda done, total: (
-                                progress_bar.progress(done / total),
-                                durum_yazisi.caption(f"{done} / {total} eser işlendi")
-                            )
-                        )
-                        progress_bar.progress(1.0)
-                        durum_yazisi.caption(f"{toplam} / {toplam} eser işlendi")
-
-                    for k in kayitlar:
-                        k["dosya_adi"] = uploaded_file.name
-
-                    t0 = time.perf_counter()
-                    self.eserler_repo.insert_many(kayitlar)
-                    sure = time.perf_counter() - t0
-
-                    st.sidebar.success(
-                        f"✅ {len(kayitlar)} eser {sure:.2f} sn'de eklendi."
-                    )
-                    del st.session_state[file_key]
-
-                except Exception as e:
-                    st.sidebar.error(f"Hata: {e}")
+            if st.sidebar.button("Eserleri Veritabanına Ekle", disabled=False):
+                st.session_state["yukleniyor"] = True
+                st.rerun()
 
         except Exception as e:
             st.sidebar.error(f"Dosya okuma hatası: {e}")
+
+    def _do_upload(self):
+        """Yükleme işlemini gerçekleştir — yukleniyor=True olduğunda çağrılır."""
+        # Hangi dosya key'i var?
+        file_key = next(
+            (k for k in st.session_state if k.startswith("docx_bytes_")), None
+        )
+        if not file_key:
+            st.session_state["yukleniyor"] = False
+            return
+
+        dosya_adi = file_key.replace("docx_bytes_", "")
+        gorsel_yukle = st.session_state.get("gorsel_yukle_tercih", True)
+
+        try:
+            with st.sidebar:
+                fresh_bytes = io.BytesIO(st.session_state[file_key])
+                doc = Document(fresh_bytes)
+
+                kayitlar_on = MuzayedeParser.parse(doc, upload_images=False)
+                toplam = len(kayitlar_on)
+
+                st.markdown("**Eserler yükleniyor...**")
+                progress_bar = st.progress(0)
+                durum_yazisi = st.empty()
+
+                fresh_bytes2 = io.BytesIO(st.session_state[file_key])
+                doc2 = Document(fresh_bytes2)
+                kayitlar = MuzayedeParser.parse(
+                    doc2,
+                    upload_images=gorsel_yukle,
+                    progress_callback=lambda done, total: (
+                        progress_bar.progress(done / total),
+                        durum_yazisi.caption(f"{done} / {total} eser işlendi")
+                    )
+                )
+                progress_bar.progress(1.0)
+                durum_yazisi.caption(f"{toplam} / {toplam} eser işlendi")
+
+            for k in kayitlar:
+                k["dosya_adi"] = dosya_adi
+
+            t0 = time.perf_counter()
+            self.eserler_repo.insert_many(kayitlar)
+            sure = time.perf_counter() - t0
+
+            st.sidebar.success(f"✅ {len(kayitlar)} eser {sure:.2f} sn'de eklendi.")
+            del st.session_state[file_key]
+
+        except Exception as e:
+            st.sidebar.error(f"Hata: {e}")
+        finally:
+            st.session_state["yukleniyor"] = False
 
     def _render_search(self):
         st.subheader("🔍 Eserlerde Ara ve Filtrele")
